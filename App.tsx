@@ -103,6 +103,10 @@ const App: React.FC = () => {
     setError(null);
   };
 
+  // DEBUG INFO: Check if key exists safely
+  const keyExists = !!process.env.API_KEY;
+  const keyStatus = keyExists ? "Loaded ✅" : "Missing ❌";
+
   return (
     <div className="min-h-screen bg-background text-foreground font-sans flex flex-col transition-colors duration-300">
       
@@ -222,6 +226,10 @@ const App: React.FC = () => {
         <div className="container max-w-4xl mx-auto text-center px-4">
            <p className="text-xs text-muted-foreground">
              Executive Search Intelligence Tool &copy; 2025 MRS.ai. All rights reserved.
+           </p>
+           {/* Debug info for Vercel troubleshooting */}
+           <p className="text-[10px] text-muted-foreground/30 font-mono mt-2 uppercase tracking-wider">
+             Env: {process.env.NODE_ENV === 'development' ? 'DEV' : 'PROD'} | API Key Check: {keyStatus}
            </p>
         </div>
       </footer>

@@ -54,22 +54,24 @@ The application uses a **Session ID** mechanism to distinguish between iterating
 
 ## 4. API Key Management & Security
 
-**⚠️ IMPORTANT:** This is a client-side (SPA) application. The API Key is exposed in the browser's network requests. To prevent quota theft, you must configure **Application Restrictions**.
+**⚠️ CRITICAL SECURITY NOTICE:**
 
-### Development Setup
-1.  Create a `.env` file in the root directory.
-2.  Add your key: `API_KEY=AIzaSy...`
-3.  The app uses a safe check logic to read `process.env.API_KEY`.
+This application is a **Client-Side SPA**. The API Key (`VITE_API_KEY`) is bundled into the JavaScript and sent to the browser.
+**Vercel will warn you about exposing this key. This is expected behavior for this architecture.**
 
-### Production Security (Vercel/Netlify)
-1.  **Environment Variable**: Set `API_KEY` in your deployment platform's settings.
+To prevent unauthorized use of your API quota, you **MUST** configure restrictions:
+
+1.  **Environment Variable**: Set `VITE_API_KEY` in Vercel's Environment Variables settings.
 2.  **Google Cloud Restrictions (Mandatory)**:
     *   Go to [Google Cloud Console > Credentials](https://console.cloud.google.com/apis/credentials).
     *   Select your API Key.
     *   Set **Application restrictions** to **Websites**.
-    *   Add your production domains:
-        *   `https://your-project.vercel.app/*`
-        *   `http://localhost:5173/*` (for local dev)
+    *   Add your **Website restrictions** (Referrers):
+        *   `https://your-project-name.vercel.app/*` (Your Vercel Domain)
+        *   `https://www.your-custom-domain.com/*` (If applicable)
+        *   `http://localhost:5173/*` (For local development)
+
+*Without these restrictions, anyone can use your API key.*
 
 ---
 

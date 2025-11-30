@@ -36,25 +36,11 @@ const analysisSchema: Schema = {
 };
 
 export const analyzeContent = async (text: string): Promise<AnalysisResult> => {
-  // Safely retrieve API Key.
-  // Note: Vercel/Vite environments might handle env vars differently. 
-  // We use the safe access to avoid "process is not defined" crashes in pure browser environments.
-  let apiKey = '';
-  try {
-     // @ts-ignore
-     if (typeof process !== 'undefined' && process.env) {
-       apiKey = process.env.API_KEY || '';
-     }
-  } catch (e) {
-     console.warn("Could not access process.env", e);
-  }
-  
-  if (!apiKey) {
-    throw new Error("API Key is missing. If deploying to Vercel, ensure 'API_KEY' is set in Environment Variables.");
-  }
+  // Use process.env.API_KEY as per guidelines. 
+  // We assume the environment variable is properly configured.
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
-  const ai = new GoogleGenAI({ apiKey });
-
+  // System instruction moved to config for better adherence
   const systemPrompt = `
     You are an Executive Search Intelligence Analyst. Your task is to analyze the provided merged web content related to a target lead. 
     Only focus on **executive-level** insights (VP and above).
