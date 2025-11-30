@@ -80,6 +80,16 @@ Set these in Supabase Dashboard > Project Settings > Edge Functions > Secrets:
 
 *   `GOOGLE_API_KEY`: Your Google Gemini API Key (`AIza...`).
 
+### C. Supabase Auth Redirects (Critical)
+To prevent the app from redirecting to `localhost:3000` after login, you must configure the whitelist:
+
+1.  Go to Supabase Dashboard > **Authentication** > **URL Configuration**.
+2.  Set **Site URL** to your Vercel production URL (e.g., `https://my-app.vercel.app`).
+3.  Add the following to **Redirect URLs**:
+    *   `https://my-app.vercel.app` (Your Production URL)
+    *   `http://localhost:5173` (Your Local Dev URL)
+4.  Click **Save**.
+
 ---
 
 ## 5. Deployment Guide

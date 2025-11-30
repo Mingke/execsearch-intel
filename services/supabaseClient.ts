@@ -17,11 +17,14 @@ const getEnvVar = (key: string): string => {
 const supabaseUrl = getEnvVar('VITE_SUPABASE_URL');
 const supabaseAnonKey = getEnvVar('VITE_SUPABASE_ANON_KEY');
 
-if (!supabaseUrl || !supabaseAnonKey) {
+export const isSupabaseConfigured = !!(supabaseUrl && supabaseAnonKey && supabaseUrl !== 'https://placeholder.supabase.co');
+
+if (!isSupabaseConfigured) {
   console.warn("Supabase credentials missing! Authentication will not work correctly.");
 }
 
-export const supabase = createClient(
-  supabaseUrl || 'https://placeholder.supabase.co',
-  supabaseAnonKey || 'placeholder'
-);
+// Use a distinct dummy URL if missing so we can catch it, but don't use a real domain that times out
+const validUrl = isSupabaseConfigured ? supabaseUrl : 'https://missing-config.local';
+const validKey = isSupabaseConfigured ? supabaseAnonKey : 'missing-key';
+
+export const supabase = createClient(validUrl, validKey);

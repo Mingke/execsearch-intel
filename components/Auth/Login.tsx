@@ -1,6 +1,5 @@
-
 import React, { useState } from 'react';
-import { supabase } from '../../services/supabaseClient';
+import { supabase, isSupabaseConfigured } from '../../services/supabaseClient';
 
 const Login: React.FC = () => {
   const [loading, setLoading] = useState(false);
@@ -13,6 +12,7 @@ const Login: React.FC = () => {
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
+          redirectTo: window.location.origin, // Forces redirect back to current domain (Vercel or Localhost)
           queryParams: {
             access_type: 'offline',
             prompt: 'consent',
@@ -26,6 +26,36 @@ const Login: React.FC = () => {
     }
   };
 
+  // 1. Check Configuration First
+  if (!isSupabaseConfigured) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background text-foreground p-4">
+        <div className="w-full max-w-lg rounded-xl border border-destructive/50 bg-destructive/10 p-6 sm:p-8 shadow-sm">
+          <div className="flex flex-col items-center gap-4 text-center">
+            <div className="rounded-full bg-destructive/20 p-3 text-destructive">
+               <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19.42 16.18a2 2 0 0 0 2.03-1.11l1.54-3.56a2 2 0 0 0-1.47-2.7C20.48 8.65 19.16 8.5 18 8.5c-2.03 0-3.37.56-4.96 1.45L9.58 12 5.09 7.6a2 2 0 0 0-3.03.24L1.8 8.1a2 2 0 0 0 .24 3.03L6 15l-1.93 4.45a2 2 0 0 0 1.11 2.03l3.56 1.54a2 2 0 0 0 2.7-1.47L12 18l-1.45-3.04"/><line x1="12" y1="12" x2="19.1" y2="4.9"/><path d="M19.1 4.9C19.83 4.18 21 5.35 21 5.35"/></svg>
+            </div>
+            <h2 className="text-xl font-bold text-destructive">Configuration Required</h2>
+            <p className="text-sm text-foreground/80">
+              The application is missing its connection to Supabase. You cannot log in until the Environment Variables are set.
+            </p>
+            <div className="text-left bg-background/50 p-4 rounded-md w-full font-mono text-xs border border-border/50 space-y-2">
+              <p className="font-bold">Required Vercel Variables:</p>
+              <ul className="list-disc list-inside space-y-1">
+                <li><code className="bg-muted px-1 rounded">VITE_SUPABASE_URL</code></li>
+                <li><code className="bg-muted px-1 rounded">VITE_SUPABASE_ANON_KEY</code></li>
+              </ul>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Please check the README.md or Vercel Project Settings.
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // 2. Render Login Form
   return (
     <div className="flex min-h-screen items-center justify-center bg-background text-foreground p-4">
       <div className="w-full max-w-md space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
