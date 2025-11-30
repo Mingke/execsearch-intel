@@ -57,13 +57,14 @@ serve(async (req) => {
     const { data: { user }, error: userError } = await supabaseClient.auth.getUser()
     if (userError || !user) {
       console.error("Auth Error:", userError);
-      throw new Error('Unauthorized')
+      throw new Error('Unauthorized: User not logged in')
     }
 
     // 3. Admin Client (Service Role) for Quota Management
     const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
     if (!serviceRoleKey) {
-      throw new Error('Server configuration error: SUPABASE_SERVICE_ROLE_KEY missing');
+      console.error("Missing SUPABASE_SERVICE_ROLE_KEY");
+      throw new Error('Server configuration error: Service Role Key missing');
     }
 
     const supabaseAdmin = createClient(
@@ -98,7 +99,10 @@ serve(async (req) => {
 
     // 6. Call Gemini API (using native fetch to avoid SDK issues in Deno)
     const apiKey = Deno.env.get('GOOGLE_API_KEY')
-    if (!apiKey) throw new Error('Server API Key configuration missing')
+    if (!apiKey) {
+      console.error("Missing GOOGLE_API_KEY");
+      throw new Error('Server API Key configuration missing');
+    }
 
     const payload = {
       contents: [
@@ -147,10 +151,11 @@ serve(async (req) => {
       }
     };
 
-    console.log("Calling Gemini API (REST)...");
+    console.log("Calling Gemini API (REST) with model: gemini-1.5-flash");
     
+    // CHANGED: Downgraded to gemini-1.5-flash for stability
     const geminiRes = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -161,7 +166,8 @@ serve(async (req) => {
     if (!geminiRes.ok) {
       const errText = await geminiRes.text();
       console.error("Gemini API Error:", errText);
-      throw new Error(`Gemini API Failed: ${geminiRes.status} ${geminiRes.statusText}`);
+      // Return the specific Google error to the client for debugging
+      throw new Error(`Gemini API Failed (${geminiRes.status}): ${errText}`);
     }
 
     const aiData = await geminiRes.json();
