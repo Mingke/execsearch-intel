@@ -28,6 +28,22 @@ const StatusBadge = ({ status, type }: { status: string; type: 'urgent' | 'futur
   );
 };
 
+// Simple helper to render bold text from markdown (e.g. **text**)
+// We avoid heavy libraries like react-markdown for performance and simplicity here
+const FormattedText = ({ text }: { text: string }) => {
+  const parts = text.split(/(\*\*.*?\*\*)/g);
+  return (
+    <span>
+      {parts.map((part, i) => {
+        if (part.startsWith('**') && part.endsWith('**')) {
+          return <strong key={i} className="font-bold text-foreground">{part.slice(2, -2)}</strong>;
+        }
+        return <span key={i}>{part}</span>;
+      })}
+    </span>
+  );
+};
+
 const ReportCard: React.FC<ReportCardProps> = ({ result }) => {
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -45,8 +61,8 @@ const ReportCard: React.FC<ReportCardProps> = ({ result }) => {
            <div className="relative">
               {result.insight.hasSignals ? (
                  <div className="prose prose-sm dark:prose-invert max-w-none">
-                    <p className="text-base sm:text-lg font-medium leading-relaxed text-foreground">
-                      {result.insight.content}
+                    <p className="text-base sm:text-lg font-medium leading-relaxed text-foreground/90">
+                      <FormattedText text={result.insight.content} />
                     </p>
                  </div>
               ) : (
@@ -77,7 +93,7 @@ const ReportCard: React.FC<ReportCardProps> = ({ result }) => {
               {result.tier1.items.map((item, idx) => (
                 <li key={idx} className="flex gap-3 text-sm text-foreground/90 group items-start">
                   <div className="mt-1.5 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-destructive/70 group-hover:bg-destructive transition-colors" />
-                  <span className="leading-snug">{item}</span>
+                  <span className="leading-snug"><FormattedText text={item} /></span>
                 </li>
               ))}
             </ul>
@@ -108,7 +124,7 @@ const ReportCard: React.FC<ReportCardProps> = ({ result }) => {
               {result.tier2.items.map((item, idx) => (
                 <li key={idx} className="flex gap-3 text-sm text-foreground/90 group items-start">
                   <div className="mt-1.5 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-blue-500/70 group-hover:bg-blue-500 transition-colors" />
-                  <span className="leading-snug">{item}</span>
+                  <span className="leading-snug"><FormattedText text={item} /></span>
                 </li>
               ))}
             </ul>

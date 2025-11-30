@@ -3,7 +3,12 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>ExecSearch Intel</title>
+    <meta name="description" content="AI-powered intelligence analyst tool for Executive Search professionals. Identify Tier 1 recruitment signals and synthesize pitch angles from web content." />
+    <meta name="theme-color" content="#09090b" />
+    <meta property="og:title" content="ExecSearch Intel - AI Analyst" />
+    <meta property="og:description" content="Synthesize unstructured web data into executive-level hiring signals." />
+    <meta property="og:type" content="website" />
+    <title>ExecSearch Intel | AI Executive Search Analyst</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
       tailwind.config = {
@@ -155,6 +160,11 @@
 </script>
   </head>
   <body class="bg-background text-foreground font-sans antialiased min-h-screen selection:bg-primary selection:text-primary-foreground">
-    <div id="root"></div>
+    <div id="root">
+       <div class="fixed inset-0 flex items-center justify-center bg-background text-muted-foreground animate-pulse">
+         <p>Loading ExecSearch Intel...</p>
+       </div>
+    </div>
+    <script type="module" src="/index.tsx"></script>
   </body>
 </html>

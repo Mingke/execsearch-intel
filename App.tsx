@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import AnalysisForm from './components/AnalysisForm';
 import ReportCard from './components/ReportCard';
 import HistorySheet from './components/HistorySheet';
@@ -17,6 +17,9 @@ const App: React.FC = () => {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [initialText, setInitialText] = useState<string>(''); // For restoring text
 
+  // Ref for scrolling to results
+  const resultRef = useRef<HTMLDivElement>(null);
+
   // Sync theme with DOM on mount
   useEffect(() => {
     if (document.documentElement.classList.contains('dark')) {
@@ -25,6 +28,16 @@ const App: React.FC = () => {
       setTheme('light');
     }
   }, []);
+
+  // Auto-scroll to results when completed
+  useEffect(() => {
+    if (status === AnalysisStatus.COMPLETED && resultRef.current) {
+      // Small timeout to allow the DOM to render the ReportCard
+      setTimeout(() => {
+        resultRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 100);
+    }
+  }, [status]);
 
   const toggleTheme = () => {
     if (theme === 'dark') {
@@ -179,7 +192,7 @@ const App: React.FC = () => {
 
         {/* Report View */}
         {result && (
-          <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
+          <div ref={resultRef} className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300 scroll-mt-20">
              <ReportCard result={result} />
              
              {/* Simple reset for bottom of page mobile users who missed the top refine button */}

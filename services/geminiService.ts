@@ -1,4 +1,4 @@
-import { GoogleGenAI, Type, Schema } from "@google/genai";
+import { GoogleGenAI, Type, Schema, HarmCategory, HarmBlockThreshold } from "@google/genai";
 import { AnalysisResult } from "../types";
 
 // Define the response schema to ensure strictly typed JSON output
@@ -48,12 +48,9 @@ export const analyzeContent = async (text: string): Promise<AnalysisResult> => {
   } catch (e) {
      console.warn("Could not access process.env", e);
   }
-
-  // Fallback: If you are using Vite and exposing via VITE_API_KEY, you might need to check import.meta.env
-  // However, based on instructions, we stick to process.env.API_KEY.
   
   if (!apiKey) {
-    throw new Error("API Key is missing. Please check your environment variables (API_KEY).");
+    throw new Error("API Key is missing. If deploying to Vercel, ensure 'API_KEY' is set in Environment Variables.");
   }
 
   const ai = new GoogleGenAI({ apiKey });
@@ -84,13 +81,20 @@ export const analyzeContent = async (text: string): Promise<AnalysisResult> => {
     const response = await ai.models.generateContent({
       model: "gemini-2.5-flash",
       contents: [
-        { role: "user", parts: [{ text: systemPrompt }] },
         { role: "user", parts: [{ text: `Analyze the following Merged Web Content:\n\n${text}` }] }
       ],
       config: {
+        systemInstruction: systemPrompt,
         responseMimeType: "application/json",
         responseSchema: analysisSchema,
         temperature: 0.2, // Low temperature for factual extraction
+        // Critical for analyst tools: Disable safety filters to allow processing news about "layoffs", "crimes", or "activism" without blocking.
+        safetySettings: [
+          { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
+          { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
+          { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+          { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+        ],
       },
     });
 
@@ -99,15 +103,22 @@ export const analyzeContent = async (text: string): Promise<AnalysisResult> => {
       throw new Error("Received empty response from Gemini API.");
     }
 
-    return JSON.parse(responseText) as AnalysisResult;
+    // Clean potential Markdown wrapping (e.g. ```json ... ```) which commonly occurs even with responseMimeType
+    const cleanJson = responseText.replace(/^```json\s*/, "").replace(/^```\s*/, "").replace(/\s*```$/, "");
+
+    return JSON.parse(cleanJson) as AnalysisResult;
   } catch (error: any) {
     console.error("Gemini Analysis Error:", error);
     // Pass through readable error messages
-    if (error.message.includes("403")) {
+    if (error.message && error.message.includes("403")) {
       throw new Error("Access Denied (403). Please check if your API Key has the correct 'Website restrictions' in Google Cloud Console.");
     }
-    if (error.message.includes("429")) {
+    if (error.message && error.message.includes("429")) {
       throw new Error("Quota Exceeded (429). You may have run out of free requests.");
+    }
+    // Handle JSON parse errors specifically
+    if (error instanceof SyntaxError) {
+       throw new Error("Failed to parse AI response. The model might have returned malformed JSON.");
     }
     throw error;
   }
