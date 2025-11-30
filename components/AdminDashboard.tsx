@@ -85,8 +85,14 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ isOpen, onClose }) => {
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-background/80 backdrop-blur-sm p-4 sm:p-6 animate-in fade-in duration-200">
-      <div className="bg-card border border-border text-card-foreground shadow-xl rounded-xl w-full max-w-5xl h-[85vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
+    <div 
+      className="fixed inset-0 z-[60] flex items-center justify-center bg-background/80 backdrop-blur-sm p-4 sm:p-6 animate-in fade-in duration-200"
+      onClick={onClose} // Close when clicking backdrop
+    >
+      <div 
+        className="bg-card border border-border text-card-foreground shadow-xl rounded-xl w-full max-w-5xl h-[85vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200"
+        onClick={(e) => e.stopPropagation()} // Prevent close when clicking content
+      >
         
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-border">

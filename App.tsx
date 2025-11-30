@@ -32,8 +32,10 @@ const App: React.FC = () => {
 
   const resultRef = useRef<HTMLDivElement>(null);
 
-  // --- Helper to fetch User Profile (Role & Credits) ---
-  const fetchUserProfile = async (userId: string) => {
+  // --- Helper to fetch User Profile (Role & Credits) with Retry ---
+  // We need retry because when a new user signs up, the Database Trigger takes a few ms 
+  // to create the profile. If we query too fast, we get null.
+  const fetchUserProfile = async (userId: string, retries = 3) => {
     try {
       const { data, error } = await supabase
         .from('profiles')
@@ -44,6 +46,10 @@ const App: React.FC = () => {
       if (data) {
         setUserCredits({ count: data.usage_count, limit: data.usage_limit });
         setUserRole(data.role as 'user' | 'admin');
+      } else if (retries > 0) {
+        // If data is missing (race condition), wait 1s and retry
+        console.log(`Profile not found, retrying... (${retries} attempts left)`);
+        setTimeout(() => fetchUserProfile(userId, retries - 1), 1000);
       }
     } catch (e) {
       console.error("Error fetching profile:", e);

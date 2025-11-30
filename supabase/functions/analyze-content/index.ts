@@ -1,13 +1,8 @@
 // Follow this setup guide to deploy: https://supabase.com/docs/guides/functions/deploy
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
-// Declare Deno global for environments where Deno types are missing
-declare const Deno: {
-  env: {
-    get(key: string): string | undefined;
-  };
-};
+// Fix for missing Deno type definitions in the development environment
+declare const Deno: any;
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -36,17 +31,21 @@ Adhere strictly to these rules for extraction:
    - State WHAT role is needed and WHY based on facts.
 `;
 
-serve(async (req) => {
+Deno.serve(async (req: any) => {
   // Handle CORS preflight request
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
   }
 
   try {
-    console.log("Edge Function Invoked: analyze-content");
+    console.log("Edge Function Invoked: analyze-content (v2.5-flash Stable)");
 
     // 1. Initialize Supabase Client
-    const authHeader = req.headers.get('Authorization')!
+    const authHeader = req.headers.get('Authorization')
+    if (!authHeader) {
+      throw new Error('Missing Authorization Header')
+    }
+
     const supabaseClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_ANON_KEY') ?? '',
@@ -60,11 +59,10 @@ serve(async (req) => {
       throw new Error('Unauthorized: User not logged in')
     }
 
-    // 3. Admin Client (Service Role) for Quota Management
+    // 3. Check Quota (Admin Client)
     const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
     if (!serviceRoleKey) {
-      console.error("Missing SUPABASE_SERVICE_ROLE_KEY");
-      throw new Error('Server configuration error: Service Role Key missing');
+       throw new Error('Server Config Error: SUPABASE_SERVICE_ROLE_KEY is missing')
     }
 
     const supabaseAdmin = createClient(
@@ -72,7 +70,6 @@ serve(async (req) => {
       serviceRoleKey
     )
 
-    // 4. Check Quota
     const { data: profile, error: profileError } = await supabaseAdmin
       .from('profiles')
       .select('usage_count, usage_limit')
@@ -81,10 +78,8 @@ serve(async (req) => {
 
     if (profileError || !profile) {
       console.error("Profile Error:", profileError);
-      throw new Error('User profile not found. Please verify the database trigger.')
+      throw new Error('User profile not found. Please contact support.')
     }
-
-    console.log(`User: ${user.email} | Usage: ${profile.usage_count} / ${profile.usage_limit}`);
 
     if (profile.usage_count >= profile.usage_limit) {
       return new Response(JSON.stringify({ error: "Quota Exceeded" }), {
@@ -93,22 +88,21 @@ serve(async (req) => {
       })
     }
 
-    // 5. Get Input Text
+    // 4. Get Input Text
     const { text } = await req.json()
     if (!text) throw new Error('Input text is required')
 
-    // 6. Call Gemini API (using native fetch to avoid SDK issues in Deno)
+    // 5. Call Gemini API (Native Fetch)
     const apiKey = Deno.env.get('GOOGLE_API_KEY')
     if (!apiKey) {
-      console.error("Missing GOOGLE_API_KEY");
-      throw new Error('Server API Key configuration missing');
+      throw new Error('Server Config Error: GOOGLE_API_KEY is missing in Secrets')
     }
 
     const payload = {
       contents: [
         {
           role: "user",
-          parts: [{ text: `Analyze the following Merged Web Content:\n\n${text}` }]
+          parts: [{ text: `Analyze this content:\n\n${text}` }]
         }
       ],
       systemInstruction: {
@@ -151,11 +145,9 @@ serve(async (req) => {
       }
     };
 
-    console.log("Calling Gemini API (REST) with model: gemini-1.5-flash");
-    
-    // CHANGED: Downgraded to gemini-1.5-flash for stability
+    // FORCE USE GEMINI 2.5 FLASH
     const geminiRes = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -166,45 +158,30 @@ serve(async (req) => {
     if (!geminiRes.ok) {
       const errText = await geminiRes.text();
       console.error("Gemini API Error:", errText);
-      // Return the specific Google error to the client for debugging
-      throw new Error(`Gemini API Failed (${geminiRes.status}): ${errText}`);
+      // Pass the actual Google error back to the client for debugging
+      throw new Error(`Google API Error: ${geminiRes.status} - ${errText}`);
     }
 
     const aiData = await geminiRes.json();
     const responseText = aiData.candidates?.[0]?.content?.parts?.[0]?.text;
 
-    if (!responseText) {
-      console.error("Empty AI Response:", aiData);
-      throw new Error('AI returned empty response');
-    }
+    if (!responseText) throw new Error('AI returned empty response');
 
-    // Parse JSON safely
-    let analysisResult;
-    try {
-      analysisResult = JSON.parse(responseText);
-    } catch (e) {
-      console.error("JSON Parse Error:", e, responseText);
-      throw new Error("Failed to parse AI response: " + e.message);
-    }
-
-    // 7. Increment Usage Count
-    const { error: updateError } = await supabaseAdmin
+    // 6. Increment Quota
+    await supabaseAdmin
       .from('profiles')
       .update({ usage_count: profile.usage_count + 1 })
       .eq('id', user.id)
 
-    if (updateError) console.error("Failed to update quota:", updateError)
-
-    // 8. Return Result
-    return new Response(JSON.stringify(analysisResult), {
+    return new Response(responseText, {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     })
 
   } catch (error: any) {
-    console.error("Edge Function Error:", error);
-    return new Response(JSON.stringify({ error: error.message || "Internal Server Error" }), {
-      status: 500, // Explicit 500 status for caught errors
+    console.error("Function Error:", error);
+    return new Response(JSON.stringify({ error: error.message }), {
+      status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     })
   }
-})
+});
