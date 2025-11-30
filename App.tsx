@@ -103,9 +103,32 @@ const App: React.FC = () => {
     setError(null);
   };
 
-  // DEBUG INFO: Check if key exists safely
-  const keyExists = !!process.env.API_KEY;
-  const keyStatus = keyExists ? "Loaded ✅" : "Missing ❌";
+  // Safe Debug Info Extraction
+  let keyStatus = "Checking...";
+  let envMode = "Unknown";
+  
+  try {
+    // @ts-ignore
+    if (typeof import.meta !== 'undefined' && import.meta.env) {
+      // @ts-ignore
+      const hasKey = !!import.meta.env.VITE_API_KEY;
+      keyStatus = hasKey ? "Loaded ✅" : "Missing ❌";
+      // @ts-ignore
+      envMode = import.meta.env.MODE === 'production' ? 'PROD' : 'DEV';
+    } else {
+       // Fallback for non-Vite envs or when import.meta.env is undefined
+       // @ts-ignore
+       if (typeof process !== 'undefined' && process.env && process.env.API_KEY) {
+          keyStatus = "Loaded ✅ (Proc)";
+          envMode = "Process";
+       } else {
+          keyStatus = "Missing ❌";
+          envMode = "Legacy";
+       }
+    }
+  } catch (e) {
+    keyStatus = "Error";
+  }
 
   return (
     <div className="min-h-screen bg-background text-foreground font-sans flex flex-col transition-colors duration-300">
@@ -229,7 +252,7 @@ const App: React.FC = () => {
            </p>
            {/* Debug info for Vercel troubleshooting */}
            <p className="text-[10px] text-muted-foreground/30 font-mono mt-2 uppercase tracking-wider">
-             Env: {process.env.NODE_ENV === 'development' ? 'DEV' : 'PROD'} | API Key Check: {keyStatus}
+             Env: {envMode} | API Key Check: {keyStatus}
            </p>
         </div>
       </footer>

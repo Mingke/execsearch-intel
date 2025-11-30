@@ -35,10 +35,41 @@ const analysisSchema: Schema = {
   required: ["tier1", "tier2", "insight"]
 };
 
+// Helper to safely extract API Key without crashing
+const getApiKey = (): string => {
+  let key = '';
+  
+  // Try Vite way (Standard) - Safe Access
+  try {
+    // @ts-ignore
+    if (typeof import.meta !== 'undefined' && import.meta.env) {
+      // @ts-ignore
+      key = import.meta.env.VITE_API_KEY || '';
+    }
+  } catch (e) {
+    // Ignore error if import.meta is not supported
+  }
+
+  // Fallback to Process env (Node/Legacy/Vercel Backend)
+  if (!key) {
+    try {
+      // @ts-ignore
+      if (typeof process !== 'undefined' && process.env) {
+        // @ts-ignore
+        key = process.env.API_KEY || '';
+      }
+    } catch (e) {
+      // Ignore error if process is not defined
+    }
+  }
+  
+  return key;
+};
+
 export const analyzeContent = async (text: string): Promise<AnalysisResult> => {
-  // Use process.env.API_KEY as per guidelines. 
-  // We assume the environment variable is properly configured.
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const apiKey = getApiKey();
+  
+  const ai = new GoogleGenAI({ apiKey });
 
   // System instruction moved to config for better adherence
   const systemPrompt = `
