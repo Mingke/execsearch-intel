@@ -25,24 +25,28 @@ export const analyzeContent = async (text: string): Promise<AnalysisResult> => {
   if (error) {
     console.error("Edge Function Error Details:", error);
     
-    // Convert generic function errors into user-friendly messages
+    // Attempt to parse the error message if it's a JSON string
+    let errorMessage = error.message || "Failed to analyze content.";
+    
+    // Check for standard Supabase Function error wrapper
     if (error.context && (error.context as any).status === 402) {
       throw new Error("Quota Exceeded. You have reached your analysis limit. Please contact the administrator.");
     }
-    
-    // Handle custom errors returned by our function
+
     try {
-      // Sometimes the error body is a JSON string
-      const errBody = typeof error.message === 'string' && error.message.startsWith('{') 
-        ? JSON.parse(error.message) 
-        : error;
-        
-      if (errBody.error) throw new Error(errBody.error);
+        // If the function returned a JSON error object (like { error: "msg" }), parse it
+        // The supbase-js client sometimes wraps the response body in 'error.message' if status is not 2xx
+        if (typeof errorMessage === 'string' && errorMessage.trim().startsWith('{')) {
+            const parsed = JSON.parse(errorMessage);
+            if (parsed.error) {
+                errorMessage = parsed.error;
+            }
+        }
     } catch (e) {
-      // If parsing fails, throw the raw message or a generic one
+        // use raw message if parse fails
     }
 
-    throw new Error(error.message || "Failed to analyze content. Please try again.");
+    throw new Error(errorMessage);
   }
 
   // 4. Return Data

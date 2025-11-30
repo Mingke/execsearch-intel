@@ -43,6 +43,8 @@ serve(async (req) => {
   }
 
   try {
+    console.log("Edge Function Invoked: analyze-content");
+
     // 1. Initialize Supabase Client
     const authHeader = req.headers.get('Authorization')!
     const supabaseClient = createClient(
@@ -54,13 +56,19 @@ serve(async (req) => {
     // 2. Verify User
     const { data: { user }, error: userError } = await supabaseClient.auth.getUser()
     if (userError || !user) {
+      console.error("Auth Error:", userError);
       throw new Error('Unauthorized')
     }
 
     // 3. Admin Client (Service Role) for Quota Management
+    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+    if (!serviceRoleKey) {
+      throw new Error('Server configuration error: SUPABASE_SERVICE_ROLE_KEY missing');
+    }
+
     const supabaseAdmin = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+      serviceRoleKey
     )
 
     // 4. Check Quota
@@ -72,8 +80,10 @@ serve(async (req) => {
 
     if (profileError || !profile) {
       console.error("Profile Error:", profileError);
-      throw new Error('User profile not found')
+      throw new Error('User profile not found. Please verify the database trigger.')
     }
+
+    console.log(`User: ${user.email} | Usage: ${profile.usage_count} / ${profile.usage_limit}`);
 
     if (profile.usage_count >= profile.usage_limit) {
       return new Response(JSON.stringify({ error: "Quota Exceeded" }), {
@@ -137,8 +147,8 @@ serve(async (req) => {
       }
     };
 
-    console.log("Calling Gemini API...");
-    // Using gemini-2.5-flash as per instructions
+    console.log("Calling Gemini API (REST)...");
+    
     const geminiRes = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
       {
@@ -168,7 +178,7 @@ serve(async (req) => {
       analysisResult = JSON.parse(responseText);
     } catch (e) {
       console.error("JSON Parse Error:", e, responseText);
-      throw new Error("Failed to parse AI response");
+      throw new Error("Failed to parse AI response: " + e.message);
     }
 
     // 7. Increment Usage Count
@@ -187,7 +197,7 @@ serve(async (req) => {
   } catch (error: any) {
     console.error("Edge Function Error:", error);
     return new Response(JSON.stringify({ error: error.message || "Internal Server Error" }), {
-      status: 500,
+      status: 500, // Explicit 500 status for caught errors
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     })
   }
