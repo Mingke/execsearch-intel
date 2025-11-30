@@ -4,6 +4,7 @@ import AnalysisForm from './components/AnalysisForm';
 import ReportCard from './components/ReportCard';
 import HistorySheet from './components/HistorySheet';
 import Login from './components/Auth/Login'; // Import Login
+import AdminDashboard from './components/AdminDashboard'; // Import Dashboard
 import { AnalysisResult, AnalysisStatus, HistoryItem } from './types';
 import { analyzeContent } from './services/geminiService';
 import { historyService } from './services/historyService';
@@ -14,6 +15,8 @@ const App: React.FC = () => {
   // Auth State
   const [session, setSession] = useState<Session | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
+  const [userRole, setUserRole] = useState<'user' | 'admin'>('user'); // New role state
+  const [userCredits, setUserCredits] = useState<{count: number, limit: number} | null>(null);
 
   // App State
   const [status, setStatus] = useState<AnalysisStatus>(AnalysisStatus.IDLE);
@@ -23,16 +26,36 @@ const App: React.FC = () => {
   
   // History & Session State
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+  const [isAdminOpen, setIsAdminOpen] = useState(false); // Admin Dashboard State
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [initialText, setInitialText] = useState<string>(''); 
 
   const resultRef = useRef<HTMLDivElement>(null);
+
+  // --- Helper to fetch User Profile (Role & Credits) ---
+  const fetchUserProfile = async (userId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('usage_count, usage_limit, role')
+        .eq('id', userId)
+        .single();
+      
+      if (data) {
+        setUserCredits({ count: data.usage_count, limit: data.usage_limit });
+        setUserRole(data.role as 'user' | 'admin');
+      }
+    } catch (e) {
+      console.error("Error fetching profile:", e);
+    }
+  };
 
   // --- Auth Initialization ---
   useEffect(() => {
     // Check active session
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
+      if (session) fetchUserProfile(session.user.id);
       setAuthLoading(false);
     });
 
@@ -41,11 +64,19 @@ const App: React.FC = () => {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
+      if (session) fetchUserProfile(session.user.id);
       setAuthLoading(false);
     });
 
     return () => subscription.unsubscribe();
   }, []);
+
+  // Poll for credit updates when status changes (after analysis)
+  useEffect(() => {
+    if (session && status === AnalysisStatus.COMPLETED) {
+      fetchUserProfile(session.user.id);
+    }
+  }, [status, session]);
 
   // --- Theme Logic ---
   useEffect(() => {
@@ -174,6 +205,25 @@ const App: React.FC = () => {
           </div>
           
           <div className="flex items-center gap-2">
+             {/* Admin Dashboard Trigger */}
+             {userRole === 'admin' && (
+                <button
+                  onClick={() => setIsAdminOpen(true)}
+                  className="mr-2 inline-flex items-center justify-center rounded-md border border-input bg-background p-2 text-sm font-medium hover:bg-accent hover:text-accent-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+                  title="Admin Dashboard"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/></svg>
+                </button>
+             )}
+
+             {/* Credits Badge */}
+             {userCredits && (
+               <div className="hidden sm:flex items-center gap-1.5 px-3 py-1 bg-muted/50 rounded-full border border-border mr-2">
+                  <div className={`h-2 w-2 rounded-full ${userCredits.count >= userCredits.limit ? 'bg-destructive' : 'bg-green-500'}`} />
+                  <span className="text-xs font-medium tabular-nums">Credits: {userCredits.count} / {userCredits.limit}</span>
+               </div>
+             )}
+
              {/* User Profile / Logout */}
              <div className="flex items-center gap-3 border-r border-border pr-3 mr-1">
                 <span className="text-xs text-muted-foreground hidden sm:inline-block max-w-[120px] truncate">
@@ -265,6 +315,14 @@ const App: React.FC = () => {
            onSelect={handleLoadHistory}
            currentSessionId={sessionId}
         />
+
+        {/* Admin Dashboard Modal */}
+        {userRole === 'admin' && (
+          <AdminDashboard 
+            isOpen={isAdminOpen} 
+            onClose={() => setIsAdminOpen(false)} 
+          />
+        )}
 
       </main>
       
