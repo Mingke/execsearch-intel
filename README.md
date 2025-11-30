@@ -67,7 +67,37 @@ create trigger on_auth_user_created
 
 ---
 
-## 4. Environment Configuration
+## 4. Admin Privileges Setup (Required for Dashboard)
+
+To make the Admin Dashboard work (so you can see/reset other users), run this SQL:
+
+```sql
+-- 1. Helper function to check if user is admin
+create or replace function public.is_admin()
+returns boolean language sql security definer stable
+as $$
+  select exists (
+    select 1 from public.profiles
+    where id = auth.uid() and role = 'admin'
+  );
+$$;
+
+-- 2. Allow Admins to view ALL profiles
+create policy "Admins can view all profiles"
+  on public.profiles for select
+  using ( is_admin() );
+
+-- 3. Allow Admins to update ALL profiles (for resetting quota)
+create policy "Admins can update all profiles"
+  on public.profiles for update
+  using ( is_admin() );
+```
+
+> **IMPORTANT**: After running this, manually update your own user row in the `profiles` table to set `role` = `'admin'`.
+
+---
+
+## 5. Environment Configuration
 
 ### A. Vercel (Frontend)
 Set these in your Vercel Project Settings > Environment Variables:
@@ -92,7 +122,7 @@ To prevent the app from redirecting to `localhost:3000` after login, you must co
 
 ---
 
-## 5. Deployment Guide
+## 6. Deployment Guide
 
 ### Deploying the Backend (Edge Function)
 You must deploy the server-side logic for the app to function.
@@ -112,14 +142,14 @@ You must deploy the server-side logic for the app to function.
     ```
 
 ### Admin Management (Reset Quota)
-Currently, quota management is done via the Supabase Dashboard:
+You can manage users via the **Admin Dashboard** in the app (if you set your role to 'admin'), or manually via the Supabase Dashboard:
 1.  Go to **Table Editor** > **profiles**.
 2.  Filter by email to find the user.
 3.  Manually set `usage_count` to `0` to reset their limit.
 
 ---
 
-## 6. Troubleshooting
+## 7. Troubleshooting
 
 **Error: "User profile not found"**
 *   **Cause**: The user logged in BEFORE the Database Trigger was created.

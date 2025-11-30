@@ -1,7 +1,6 @@
 // Follow this setup guide to deploy: https://supabase.com/docs/guides/functions/deploy
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { GoogleGenAI, HarmCategory, HarmBlockThreshold, Schema, Type } from 'https://esm.sh/@google/genai'
 
 // Declare Deno global for environments where Deno types are missing
 declare const Deno: {
@@ -15,41 +14,7 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-// --- JSON Schema (Same as frontend) ---
-const analysisSchema: Schema = {
-  type: Type.OBJECT,
-  properties: {
-    tier1: {
-      type: Type.OBJECT,
-      properties: {
-        status: { type: Type.STRING },
-        items: { type: Type.ARRAY, items: { type: Type.STRING } },
-        hasSignals: { type: Type.BOOLEAN }
-      },
-      required: ["status", "items", "hasSignals"]
-    },
-    tier2: {
-      type: Type.OBJECT,
-      properties: {
-        status: { type: Type.STRING },
-        items: { type: Type.ARRAY, items: { type: Type.STRING } },
-        hasSignals: { type: Type.BOOLEAN }
-      },
-      required: ["status", "items", "hasSignals"]
-    },
-    insight: {
-      type: Type.OBJECT,
-      properties: {
-        content: { type: Type.STRING },
-        hasSignals: { type: Type.BOOLEAN }
-      },
-      required: ["content", "hasSignals"]
-    }
-  },
-  required: ["tier1", "tier2", "insight"]
-};
-
-// --- System Prompt ---
+// System Prompt
 const systemPrompt = `
 You are an Executive Search Intelligence Analyst. Your task is to analyze the provided merged web content related to a target lead. Only focus on **executive-level** insights (VP and above).
 
@@ -78,8 +43,7 @@ serve(async (req) => {
   }
 
   try {
-    // 1. Initialize Supabase Client (Service Role for Admin actions, or Auth context)
-    // We use the Authorization header to create a client that acts AS the user for reading
+    // 1. Initialize Supabase Client
     const authHeader = req.headers.get('Authorization')!
     const supabaseClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
@@ -93,8 +57,7 @@ serve(async (req) => {
       throw new Error('Unauthorized')
     }
 
-    // 3. Admin Client (To bypass RLS for incrementing usage if needed, or ensuring data integrity)
-    // We strictly need the Service Role key to safely increment the counter without user manipulation
+    // 3. Admin Client (Service Role) for Quota Management
     const supabaseAdmin = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
@@ -108,11 +71,11 @@ serve(async (req) => {
       .single()
 
     if (profileError || !profile) {
+      console.error("Profile Error:", profileError);
       throw new Error('User profile not found')
     }
 
     if (profile.usage_count >= profile.usage_limit) {
-      // Return 402 Payment Required status for quota exceeded
       return new Response(JSON.stringify({ error: "Quota Exceeded" }), {
         status: 402,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
@@ -123,40 +86,91 @@ serve(async (req) => {
     const { text } = await req.json()
     if (!text) throw new Error('Input text is required')
 
-    // 6. Call Gemini API
+    // 6. Call Gemini API (using native fetch to avoid SDK issues in Deno)
     const apiKey = Deno.env.get('GOOGLE_API_KEY')
     if (!apiKey) throw new Error('Server API Key configuration missing')
 
-    const ai = new GoogleGenAI({ apiKey });
-    
-    // Note: Deno environment, ensuring we use standard fetch implicitly supported by SDK
-    const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
+    const payload = {
       contents: [
-        { role: "user", parts: [{ text: `Analyze the following Merged Web Content:\n\n${text}` }] }
+        {
+          role: "user",
+          parts: [{ text: `Analyze the following Merged Web Content:\n\n${text}` }]
+        }
       ],
-      config: {
-        systemInstruction: systemPrompt,
-        responseMimeType: "application/json",
-        responseSchema: analysisSchema,
-        temperature: 0.2,
-        safetySettings: [
-          { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
-          { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
-          { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
-          { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
-        ],
+      systemInstruction: {
+        parts: [{ text: systemPrompt }]
       },
-    });
+      generationConfig: {
+        temperature: 0.2,
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: "OBJECT",
+          properties: {
+            tier1: {
+              type: "OBJECT",
+              properties: {
+                status: { type: "STRING" },
+                items: { type: "ARRAY", items: { type: "STRING" } },
+                hasSignals: { type: "BOOLEAN" }
+              },
+              required: ["status", "items", "hasSignals"]
+            },
+            tier2: {
+              type: "OBJECT",
+              properties: {
+                status: { type: "STRING" },
+                items: { type: "ARRAY", items: { type: "STRING" } },
+                hasSignals: { type: "BOOLEAN" }
+              },
+              required: ["status", "items", "hasSignals"]
+            },
+            insight: {
+              type: "OBJECT",
+              properties: {
+                content: { type: "STRING" },
+                hasSignals: { type: "BOOLEAN" }
+              },
+              required: ["content", "hasSignals"]
+            }
+          }
+        }
+      }
+    };
 
-    const responseText = response.text;
-    if (!responseText) throw new Error('AI returned empty response');
-    
-    // Clean markdown if present
-    const cleanJson = responseText.replace(/^```json\s*/, "").replace(/^```\s*/, "").replace(/\s*```$/, "");
-    const analysisResult = JSON.parse(cleanJson);
+    console.log("Calling Gemini API...");
+    const geminiRes = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      }
+    );
 
-    // 7. Increment Usage Count (Using Admin Client)
+    if (!geminiRes.ok) {
+      const errText = await geminiRes.text();
+      console.error("Gemini API Error:", errText);
+      throw new Error(`Gemini API Failed: ${geminiRes.status} ${geminiRes.statusText}`);
+    }
+
+    const aiData = await geminiRes.json();
+    const responseText = aiData.candidates?.[0]?.content?.parts?.[0]?.text;
+
+    if (!responseText) {
+      console.error("Empty AI Response:", aiData);
+      throw new Error('AI returned empty response');
+    }
+
+    // Parse JSON safely
+    let analysisResult;
+    try {
+      analysisResult = JSON.parse(responseText);
+    } catch (e) {
+      console.error("JSON Parse Error:", e, responseText);
+      throw new Error("Failed to parse AI response");
+    }
+
+    // 7. Increment Usage Count
     const { error: updateError } = await supabaseAdmin
       .from('profiles')
       .update({ usage_count: profile.usage_count + 1 })
@@ -169,8 +183,9 @@ serve(async (req) => {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     })
 
-  } catch (error) {
-    return new Response(JSON.stringify({ error: error.message }), {
+  } catch (error: any) {
+    console.error("Edge Function Error:", error);
+    return new Response(JSON.stringify({ error: error.message || "Internal Server Error" }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     })
