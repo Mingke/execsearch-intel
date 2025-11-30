@@ -1,5 +1,6 @@
+
 // Follow this setup guide to deploy: https://supabase.com/docs/guides/functions/deploy
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3'
 
 // Fix for missing Deno type definitions in the development environment
 declare const Deno: any;
@@ -32,15 +33,27 @@ Adhere strictly to these rules for extraction:
 `;
 
 Deno.serve(async (req: any) => {
-  // Handle CORS preflight request
+  // 1. Handle CORS preflight request
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
   }
 
   try {
-    console.log("Edge Function Invoked: analyze-content (v2.5-flash Stable)");
+    // 2. Health Check Endpoint (GET)
+    // Used by Admin Dashboard to verify if the function is reachable
+    if (req.method === 'GET') {
+       return new Response(JSON.stringify({ 
+         status: 'online', 
+         timestamp: new Date().toISOString(),
+         model: 'gemini-1.5-flash' // Currently using stable model
+       }), {
+         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+       })
+    }
 
-    // 1. Initialize Supabase Client
+    console.log("Edge Function Invoked: analyze-content");
+
+    // 3. Initialize Supabase Client
     const authHeader = req.headers.get('Authorization')
     if (!authHeader) {
       throw new Error('Missing Authorization Header')
@@ -52,14 +65,14 @@ Deno.serve(async (req: any) => {
       { global: { headers: { Authorization: authHeader } } }
     )
 
-    // 2. Verify User
+    // 4. Verify User
     const { data: { user }, error: userError } = await supabaseClient.auth.getUser()
     if (userError || !user) {
       console.error("Auth Error:", userError);
       throw new Error('Unauthorized: User not logged in')
     }
 
-    // 3. Check Quota (Admin Client)
+    // 5. Check Quota (Admin Client)
     const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
     if (!serviceRoleKey) {
        throw new Error('Server Config Error: SUPABASE_SERVICE_ROLE_KEY is missing')
@@ -88,11 +101,11 @@ Deno.serve(async (req: any) => {
       })
     }
 
-    // 4. Get Input Text
+    // 6. Get Input Text
     const { text } = await req.json()
     if (!text) throw new Error('Input text is required')
 
-    // 5. Call Gemini API (Native Fetch)
+    // 7. Call Gemini API (Native Fetch)
     const apiKey = Deno.env.get('GOOGLE_API_KEY')
     if (!apiKey) {
       throw new Error('Server Config Error: GOOGLE_API_KEY is missing in Secrets')
@@ -145,9 +158,9 @@ Deno.serve(async (req: any) => {
       }
     };
 
-    // FORCE USE GEMINI 2.5 FLASH
+    // Using gemini-1.5-flash for maximum stability with REST API
     const geminiRes = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -158,7 +171,6 @@ Deno.serve(async (req: any) => {
     if (!geminiRes.ok) {
       const errText = await geminiRes.text();
       console.error("Gemini API Error:", errText);
-      // Pass the actual Google error back to the client for debugging
       throw new Error(`Google API Error: ${geminiRes.status} - ${errText}`);
     }
 
@@ -167,7 +179,7 @@ Deno.serve(async (req: any) => {
 
     if (!responseText) throw new Error('AI returned empty response');
 
-    // 6. Increment Quota
+    // 8. Increment Quota
     await supabaseAdmin
       .from('profiles')
       .update({ usage_count: profile.usage_count + 1 })

@@ -2,6 +2,20 @@
 import { supabase } from './supabaseClient';
 import { AnalysisResult } from '../types';
 
+// Ping the Edge Function to check if it's reachable
+export const checkSystemHealth = async (): Promise<{ ok: boolean; message: string }> => {
+  try {
+    const { data, error } = await supabase.functions.invoke('analyze-content', {
+      method: 'GET', // Health check endpoint
+    });
+
+    if (error) throw error;
+    return { ok: true, message: `System Online (Model: ${data.model || 'Unknown'})` };
+  } catch (err: any) {
+    return { ok: false, message: err.message || 'Connection Failed' };
+  }
+};
+
 export const analyzeContent = async (text: string): Promise<AnalysisResult> => {
   console.log("Starting analysis...");
 
@@ -15,7 +29,6 @@ export const analyzeContent = async (text: string): Promise<AnalysisResult> => {
   console.log("User authenticated, invoking Edge Function...");
 
   // 2. Invoke the Supabase Edge Function
-  // The backend now handles: Quota check, Gemini API call, and Usage increment.
   const { data, error } = await supabase.functions.invoke('analyze-content', {
     body: { text }
   });
@@ -26,13 +39,15 @@ export const analyzeContent = async (text: string): Promise<AnalysisResult> => {
   if (error) {
     console.error("Edge Function Error Details:", error);
     
-    // Attempt to parse the error message if it's a JSON string
-    // The supbase-js client sometimes wraps the response body in 'error.message' if status is not 2xx
-    // It can look like: "{\"error\": \"Quota Exceeded\"}" or just "Quota Exceeded"
     let errorMessage = error.message || "Failed to analyze content.";
     
+    // Map generic network errors to something helpful
+    if (errorMessage.includes("Failed to send a request") || errorMessage.includes("fetch")) {
+       errorMessage = "Unable to connect to the cloud function. This is likely a CORS or Deployment issue. Please run Diagnostics in Admin Dashboard.";
+    }
+
     try {
-        // Try parsing the error.message string as JSON
+        // Try parsing JSON error from backend
         if (typeof errorMessage === 'string' && (errorMessage.startsWith('{') || errorMessage.startsWith('"'))) {
             const parsed = JSON.parse(errorMessage);
             if (parsed.error) {

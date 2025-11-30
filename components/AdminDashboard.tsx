@@ -1,6 +1,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { supabase } from '../services/supabaseClient';
+import { checkSystemHealth } from '../services/geminiService'; // Import health check
 import { UserProfile } from '../types';
 
 interface AdminDashboardProps {
@@ -12,6 +13,10 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ isOpen, onClose }) => {
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  
+  // Diagnostics State
+  const [healthStatus, setHealthStatus] = useState<'idle' | 'checking' | 'ok' | 'error'>('idle');
+  const [healthMessage, setHealthMessage] = useState<string>('');
 
   // Fetch users when dashboard opens
   useEffect(() => {
@@ -78,6 +83,19 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ isOpen, onClose }) => {
     }
   };
 
+  const runDiagnostics = async () => {
+      setHealthStatus('checking');
+      setHealthMessage('Pinging Edge Function...');
+      const result = await checkSystemHealth();
+      if (result.ok) {
+          setHealthStatus('ok');
+          setHealthMessage(result.message);
+      } else {
+          setHealthStatus('error');
+          setHealthMessage(result.message);
+      }
+  };
+
   // Stats
   const totalUsers = users.length;
   const totalUsage = users.reduce((acc, curr) => acc + curr.usage_count, 0);
@@ -121,15 +139,17 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ isOpen, onClose }) => {
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-auto p-6">
+        <div className="flex-1 overflow-auto p-6 flex flex-col gap-6">
+          
+          {/* User Table */}
           {loading ? (
-             <div className="flex h-full items-center justify-center">
+             <div className="flex h-32 items-center justify-center">
                <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
              </div>
           ) : (
-            <div className="w-full overflow-x-auto">
+            <div className="w-full overflow-x-auto border border-border rounded-lg">
               <table className="w-full text-sm text-left">
-                <thead className="text-xs text-muted-foreground uppercase bg-muted/50 border-y border-border">
+                <thead className="text-xs text-muted-foreground uppercase bg-muted/50 border-b border-border">
                   <tr>
                     <th className="px-4 py-3 font-medium">User</th>
                     <th className="px-4 py-3 font-medium">Role</th>
@@ -204,6 +224,29 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ isOpen, onClose }) => {
               </table>
             </div>
           )}
+
+          {/* System Health Section */}
+          <div className="border border-border rounded-lg p-4 bg-muted/10">
+              <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-sm font-semibold">System Diagnostics</h3>
+                  <button 
+                    onClick={runDiagnostics}
+                    disabled={healthStatus === 'checking'}
+                    className="text-xs border border-input bg-background hover:bg-accent px-3 py-1.5 rounded transition-colors"
+                  >
+                    {healthStatus === 'checking' ? 'Testing...' : 'Run Diagnostics'}
+                  </button>
+              </div>
+              <div className="text-xs font-mono bg-background p-3 rounded border border-border min-h-[60px] whitespace-pre-wrap break-all">
+                  {healthStatus === 'idle' && <span className="text-muted-foreground">Ready to test connection to Edge Function...</span>}
+                  {healthStatus === 'checking' && <span className="text-blue-500">Connecting...</span>}
+                  {healthStatus === 'ok' && <span className="text-green-500 font-bold">✅ {healthMessage}</span>}
+                  {healthStatus === 'error' && <span className="text-destructive font-bold">❌ {healthMessage}</span>}
+              </div>
+              <p className="text-[10px] text-muted-foreground mt-2">
+                  Use this to check if the Supabase Edge Function is deployed and reachable (CORS check).
+              </p>
+          </div>
         </div>
       </div>
     </div>
