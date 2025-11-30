@@ -51,7 +51,7 @@ Deno.serve(async (req: any) => {
        })
     }
 
-    console.log("Edge Function Invoked: analyze-content");
+    console.log("Edge Function Invoked: smooth-worker (analyze-content logic)");
 
     // 3. Initialize Supabase Client
     const authHeader = req.headers.get('Authorization')

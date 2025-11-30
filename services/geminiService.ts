@@ -1,11 +1,11 @@
-
 import { supabase } from './supabaseClient';
 import { AnalysisResult } from '../types';
 
 // Ping the Edge Function to check if it's reachable
 export const checkSystemHealth = async (): Promise<{ ok: boolean; message: string }> => {
   try {
-    const { data, error } = await supabase.functions.invoke('analyze-content', {
+    // UPDATED: Using the actual deployed slug 'smooth-worker'
+    const { data, error } = await supabase.functions.invoke('smooth-worker', {
       method: 'GET', // Health check endpoint
     });
 
@@ -29,7 +29,8 @@ export const analyzeContent = async (text: string): Promise<AnalysisResult> => {
   console.log("User authenticated, invoking Edge Function...");
 
   // 2. Invoke the Supabase Edge Function
-  const { data, error } = await supabase.functions.invoke('analyze-content', {
+  // UPDATED: Using the actual deployed slug 'smooth-worker'
+  const { data, error } = await supabase.functions.invoke('smooth-worker', {
     body: { text }
   });
 
