@@ -1,4 +1,3 @@
-
 // Follow this setup guide to deploy: https://supabase.com/docs/guides/functions/deploy
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3'
 

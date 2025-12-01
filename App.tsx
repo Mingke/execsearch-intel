@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import AnalysisForm from './components/AnalysisForm';
 import ReportCard from './components/ReportCard';
