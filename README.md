@@ -1,160 +1,149 @@
 
-# ExecSearch Intel - AI Analyst
+# Executive Search Intelligence Tool
 
 **Copyright © 2025 MRS.ai. All rights reserved.**
 
 ## 1. Project Overview
 
-The **ExecSearch Intel** tool automates the analysis of unstructured web content to identify high-value recruitment signals for Executive Search Professionals. 
+The **Executive Search Intelligence Tool** is a specialized AI-powered application designed for Executive Search Professionals (Headhunters). It automates the analysis of unstructured web content (news, press releases, LinkedIn posts) to identify high-value recruitment signals.
 
-It utilizes a modern **Serverless Architecture**:
-*   **Frontend**: React + Vite (Hosted on Vercel)
-*   **Backend**: Supabase Edge Functions (Hosted on Supabase)
-*   **Database**: Supabase PostgreSQL (for user quotas)
-*   **AI**: Google Gemini 2.5 Flash
+Unlike generic summarizers, this tool filters specifically for **VP-level and above** insights, categorizing them into "Urgent Triggers" and "Strategic Opportunities," and synthesizing a ready-to-use **Sales Pitch Angle**.
 
-## 2. Architecture & Security Flow
-
-1.  **User Login**: Users authenticate via Google Sign-In (Supabase Auth).
-2.  **Request**: Frontend sends text to Supabase Edge Function (`analyze-content`).
-3.  **Verification**: Edge Function verifies the User Session token.
-4.  **Quota Check**: Edge Function checks the `profiles` database table (`usage_count < usage_limit`).
-5.  **AI Analysis**: Edge Function securely calls Google Gemini API (Key is hidden in server secrets).
-6.  **Accounting**: Edge Function increments the user's `usage_count` in the database.
-7.  **Response**: Frontend receives the analysis result.
+### Core Value Proposition
+*   **Noise Reduction**: Filters out non-executive news.
+*   **Structured Intelligence**: Converts raw text into structured JSON data (Tier 1 vs. Tier 2 signals).
+*   **Actionable Output**: Generates a specific reason *why* a company needs to hire now.
 
 ---
 
-## 3. Database Setup (Required)
+## 2. Key Features
 
-To initialize the quota system, run the following SQL in your **Supabase SQL Editor**:
+### Intelligence Extraction
+*   **Tier 1 Signals (Urgent/High-Priority)**: Detects C-Suite departures, M&A, IPOs, and restructuring events within the last 12 months.
+*   **Tier 2 Signals (Future Opportunity)**: Detects digital transformations, new market entries, and "Head of" level hiring patterns.
+*   **Pitch Angle Synthesis**: Generates a concise, fact-based paragraph explaining the hiring need.
 
-```sql
--- 1. Create profiles table
-create table public.profiles (
-  id uuid not null references auth.users on delete cascade,
-  email text,
-  usage_count integer default 0,
-  usage_limit integer default 10, -- Default Free Tier limit
-  role text default 'user',
-  primary key (id)
-);
+### User Experience (UX)
+*   **Collapsible Workspace**:
+    *   **Refine Mode**: Updates the current analysis session without losing context.
+    *   **New Analysis Mode**: One-click reset (via the "+" button) that clears context and starts a fresh session ID.
+*   **Responsive Dashboard**: Mobile-first design using Shadcn/UI principles.
+*   **History Management**: LocalStorage-based sidebar to track past analyses, restore sessions, and manage workflow.
+*   **Dark Mode**: Professional "Zinc" aesthetic optimized for data density.
 
--- 2. Enable Row Level Security (RLS)
-alter table public.profiles enable row level security;
+---
 
--- Allow users to view their own quota
-create policy "Users can view own profile" 
-  on public.profiles for select 
-  using ( auth.uid() = id );
+## 3. Product Logic & Specifications
 
--- 3. Automatic Profile Creation Trigger
--- This ensures every new user gets a profile with 10 credits automatically.
-create or replace function public.handle_new_user()
-returns trigger language plpgsql security definer set search_path = public
-as $$
-begin
-  insert into public.profiles (id, email, usage_count, usage_limit, role)
-  values (new.id, new.email, 0, 10, 'user');
-  return new;
-end;
-$$;
+### Session Management (Crucial)
+The application uses a **Session ID** mechanism to distinguish between iterating on a current task and starting a new one.
 
-create trigger on_auth_user_created
-  after insert on auth.users
-  for each row execute procedure public.handle_new_user();
+| Action | Logic | Data Persistence |
+| :--- | :--- | :--- |
+| **Initial Analyze** | Generates new `UUID`. | Creates new record in History. |
+| **Refine Analysis** | Keeps existing `UUID`. | **Updates** the existing record in History (Overwrite). |
+| **New Analysis (+)** | Clears `UUID` & State. | Ready to create a **new** record on next submit. |
+| **Load History** | Restores saved `UUID`. | Future refinements will update this restored record. |
+
+### Storage
+*   **Persistence**: Browser `localStorage`.
+*   **Key**: `exec_search_history`
+*   **Limit**: Last 50 items (FIFO).
+
+---
+
+## 4. API Key Management & Security
+
+**⚠️ IMPORTANT:** This is a client-side (SPA) application. The API Key is exposed in the browser's network requests. To prevent quota theft, you must configure **Application Restrictions**.
+
+### Development Setup
+1.  Create a `.env` file in the root directory.
+2.  Add your key: `API_KEY=AIzaSy...`
+3.  The app uses a safe check logic to read `process.env.API_KEY`.
+
+### Production Security (Vercel/Netlify)
+1.  **Environment Variable**: Set `API_KEY` in your deployment platform's settings.
+2.  **Google Cloud Restrictions (Mandatory)**:
+    *   Go to [Google Cloud Console > Credentials](https://console.cloud.google.com/apis/credentials).
+    *   Select your API Key.
+    *   Set **Application restrictions** to **Websites**.
+    *   Add your production domains:
+        *   `https://your-project.vercel.app/*`
+        *   `http://localhost:5173/*` (for local dev)
+
+---
+
+## 5. The "Brain" (AI Logic)
+
+The core intelligence is driven by **Google Gemini 2.5 Flash**. Below is the configuration used to enforce the business logic.
+
+### System Prompt
+```text
+You are an Executive Search Intelligence Analyst. Your task is to analyze the provided merged web content related to a target lead. Only focus on **executive-level** insights (VP and above).
+
+Adhere strictly to these rules for extraction:
+
+1. **Immediate Executive Search Triggers (Tier 1 Signals):**
+   - News in last 12 months: C-Suite appointments/departures, succession planning.
+   - News in last 12 months: Major M&A, Funding, IPOs, Activist investor pressure.
+   - News in last 12 months: Major restructuring, reorganization, layoffs affecting leadership.
+   - Logic: If found, status is "Urgent/High-Priority".
+
+2. **Strategic Growth & Future Roles (Tier 2 Signals):**
+   - News in last 12 months: New market entries, Digital/ESG transformation, New regional HQ.
+   - News in last 12 months: Hiring for "Head of", "Global", "President", "GM".
+   - Logic: If found, status is "Future Opportunity".
+
+3. **Actionable Executive Search Insight:**
+   - Synthesize a concise, single-paragraph pitch angle based on the above.
+   - State WHAT role is needed and WHY based on facts.
 ```
 
+### JSON Schema (Strict Mode)
+We use Gemini's `responseSchema` to guarantee the UI never breaks.
+*   **Root**: `tier1`, `tier2`, `insight`
+*   **Tier Object**: `status` (Enum-like string), `items` (Array of strings), `hasSignals` (Boolean).
+
 ---
 
-## 4. Admin Privileges Setup (Required for Dashboard)
+## 6. Tech Stack
 
-To make the Admin Dashboard work (so you can see/reset other users), run this SQL:
+*   **Framework**: React 19
+*   **Build Tool**: Vite
+*   **Language**: TypeScript
+*   **Styling**: Tailwind CSS (configured with Shadcn/UI tokens).
+*   **AI SDK**: `@google/genai`
+*   **Icons**: Lucide React (via SVG)
 
-```sql
--- 1. Helper function to check if user is admin
-create or replace function public.is_admin()
-returns boolean language sql security definer stable
-as $$
-  select exists (
-    select 1 from public.profiles
-    where id = auth.uid() and role = 'admin'
-  );
-$$;
+---
 
--- 2. Allow Admins to view ALL profiles
-create policy "Admins can view all profiles"
-  on public.profiles for select
-  using ( is_admin() );
+## 7. Roadmap
 
--- 3. Allow Admins to update ALL profiles (for resetting quota)
-create policy "Admins can update all profiles"
-  on public.profiles for update
-  using ( is_admin() );
+### Phase 1 (Current)
+- [x] Core Analysis Engine
+- [x] Responsive UI (Mobile/Desktop)
+- [x] History & Session Management
+- [x] Dark Mode
+
+### Phase 2 (Next Up)
+- [ ] **Export to PDF/Clipboard**: Button to copy the "Pitch Angle" or save report as PDF.
+- [ ] **Multi-Language Support**: Allow analyzing non-English news.
+
+### Phase 3 (Mid-Term)
+- [ ] **Auth System**: User accounts to sync history across devices.
+- [ ] **URL Scraping**: Input a URL instead of raw text (requires backend proxy).
+
+---
+
+## 8. Installation
+
+```bash
+# Install dependencies
+npm install
+
+# Start development server
+npm run dev
+
+# Build for production
+npm run build
 ```
-
-> **IMPORTANT**: After running this, manually update your own user row in the `profiles` table to set `role` = `'admin'`.
-
----
-
-## 5. Environment Configuration
-
-### A. Vercel (Frontend)
-Set these in your Vercel Project Settings > Environment Variables:
-
-*   `VITE_SUPABASE_URL`: Your Supabase Project URL (e.g., `https://xyz.supabase.co`).
-*   `VITE_SUPABASE_ANON_KEY`: Your Supabase Public Anon Key.
-
-### B. Supabase (Backend Secrets)
-Set these in Supabase Dashboard > Project Settings > Edge Functions > Secrets:
-
-*   `GOOGLE_API_KEY`: Your Google Gemini API Key (`AIza...`).
-
-### C. Supabase Auth Redirects (Critical)
-To prevent the app from redirecting to `localhost:3000` after login, you must configure the whitelist:
-
-1.  Go to Supabase Dashboard > **Authentication** > **URL Configuration**.
-2.  Set **Site URL** to your Vercel production URL (e.g., `https://my-app.vercel.app`).
-3.  Add the following to **Redirect URLs**:
-    *   `https://my-app.vercel.app` (Your Production URL)
-    *   `http://localhost:5173` (Your Local Dev URL)
-4.  Click **Save**.
-
----
-
-## 6. Deployment Guide
-
-### Deploying the Backend (Edge Function)
-You must deploy the server-side logic for the app to function.
-
-1.  **Install Supabase CLI**:
-    ```bash
-    npm install -g supabase
-    ```
-2.  **Login to Supabase**:
-    ```bash
-    npx supabase login
-    ```
-3.  **Deploy the Function**:
-    Run this command from the project root:
-    ```bash
-    npx supabase functions deploy analyze-content
-    ```
-
-### Admin Management (Reset Quota)
-You can manage users via the **Admin Dashboard** in the app (if you set your role to 'admin'), or manually via the Supabase Dashboard:
-1.  Go to **Table Editor** > **profiles**.
-2.  Filter by email to find the user.
-3.  Manually set `usage_count` to `0` to reset their limit.
-
----
-
-## 7. Troubleshooting
-
-**Error: "User profile not found"**
-*   **Cause**: The user logged in BEFORE the Database Trigger was created.
-*   **Fix**: Go to Supabase > Authentication, delete the user, and ask them to sign up again. Or manually insert a row into the `profiles` table with their User UUID.
-
-**Error: "Quota Exceeded"**
-*   **Cause**: User has reached their `usage_limit`.
-*   **Fix**: See "Admin Management" above to reset their count.

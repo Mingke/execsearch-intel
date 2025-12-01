@@ -150,7 +150,7 @@ May 2024: TGC is reportedly looking for a new "Head of Global Sustainability" to
             <textarea
               ref={textareaRef}
               id="content"
-              className="flex min-h-[180px] sm:min-h-[320px] max-h-[60vh] w-full rounded-lg border border-input bg-transparent px-4 py-3 text-sm sm:text-base shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-0 disabled:cursor-not-allowed disabled:opacity-50 resize-y font-mono leading-relaxed transition-colors"
+              className="flex min-h-[180px] sm:min-h-[320px] w-full rounded-lg border border-input bg-transparent px-4 py-3 text-sm sm:text-base shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-0 disabled:cursor-not-allowed disabled:opacity-50 resize-y font-mono leading-relaxed transition-colors"
               placeholder="Paste merged web content here..."
               value={text}
               onChange={(e) => setText(e.target.value)}

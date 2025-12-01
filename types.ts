@@ -1,4 +1,3 @@
-
 export interface AnalysisResult {
   tier1: {
     status: string;
@@ -21,15 +20,6 @@ export interface HistoryItem {
   timestamp: number;
   text: string;
   result: AnalysisResult;
-}
-
-export interface UserProfile {
-  id: string;
-  email: string;
-  usage_count: number;
-  usage_limit: number;
-  role: 'user' | 'admin';
-  created_at?: string;
 }
 
 export enum AnalysisStatus {
