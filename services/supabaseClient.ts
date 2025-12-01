@@ -1,30 +1,49 @@
-import { createClient } from '@supabase/supabase-js';
+import { createBrowserClient } from "@supabase/ssr"
+import type { SupabaseClient } from "@supabase/supabase-js"
 
-// Helper to safely access environment variables in various environments (Vite/Browser/Test)
-const getEnvVar = (key: string): string => {
-  try {
-    // @ts-ignore
-    if (typeof import.meta !== 'undefined' && import.meta.env) {
-      // @ts-ignore
-      return import.meta.env[key] || '';
-    }
-  } catch (e) {
-    // ignore errors in environments where import.meta is not supported
+function getSupabaseUrl(): string | undefined {
+  if (process.env.NEXT_PUBLIC_SUPABASE_URL) {
+    return process.env.NEXT_PUBLIC_SUPABASE_URL
   }
-  return '';
-};
 
-const supabaseUrl = getEnvVar('VITE_SUPABASE_URL');
-const supabaseAnonKey = getEnvVar('VITE_SUPABASE_ANON_KEY');
+  // Try to derive from POSTGRES_URL
+  // Format: postgres://postgres.[project-ref]:[password]@aws-0-[region].pooler.supabase.com:6543/postgres
+  const postgresUrl = process.env.POSTGRES_URL
+  if (postgresUrl) {
+    const match = postgresUrl.match(/postgres\.([a-z0-9]+):/)
+    if (match && match[1]) {
+      return `https://${match[1]}.supabase.co`
+    }
+  }
 
-export const isSupabaseConfigured = !!(supabaseUrl && supabaseAnonKey && supabaseUrl !== 'https://placeholder.supabase.co');
-
-if (!isSupabaseConfigured) {
-  console.warn("Supabase credentials missing! Authentication will not work correctly.");
+  return undefined
 }
 
-// Use a distinct dummy URL if missing so we can catch it, but don't use a real domain that times out
-const validUrl = isSupabaseConfigured ? supabaseUrl : 'https://missing-config.local';
-const validKey = isSupabaseConfigured ? supabaseAnonKey : 'missing-key';
+const supabaseUrl = getSupabaseUrl()
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY
 
-export const supabase = createClient(validUrl, validKey);
+export const isSupabaseConfigured = !!(supabaseUrl && supabaseAnonKey)
+
+if (!isSupabaseConfigured) {
+  console.warn("Supabase credentials missing! Authentication will not work correctly.")
+  console.warn("Supabase URL:", supabaseUrl ? "Found" : "Missing")
+  console.warn("Supabase Anon Key:", supabaseAnonKey ? "Found" : "Missing")
+}
+
+// Singleton pattern to prevent multiple client instances
+let supabaseInstance: SupabaseClient | null = null
+
+export function getSupabase(): SupabaseClient | null {
+  if (!isSupabaseConfigured) {
+    return null
+  }
+
+  if (!supabaseInstance) {
+    supabaseInstance = createBrowserClient(supabaseUrl!, supabaseAnonKey!)
+  }
+
+  return supabaseInstance
+}
+
+// For backward compatibility - exports a client or null
+export const supabase = isSupabaseConfigured ? createBrowserClient(supabaseUrl!, supabaseAnonKey!) : null

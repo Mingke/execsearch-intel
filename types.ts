@@ -1,4 +1,3 @@
-
 export interface AnalysisResult {
   tier1: {
     status: string;
