@@ -1,30 +1,29 @@
-import { createClient } from '@supabase/supabase-js';
+import { createBrowserClient } from "@supabase/ssr"
+import type { SupabaseClient } from "@supabase/supabase-js"
 
-// Helper to safely access environment variables in various environments (Vite/Browser/Test)
-const getEnvVar = (key: string): string => {
-  try {
-    // @ts-ignore
-    if (typeof import.meta !== 'undefined' && import.meta.env) {
-      // @ts-ignore
-      return import.meta.env[key] || '';
-    }
-  } catch (e) {
-    // ignore errors in environments where import.meta is not supported
-  }
-  return '';
-};
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
-const supabaseUrl = getEnvVar('VITE_SUPABASE_URL');
-const supabaseAnonKey = getEnvVar('VITE_SUPABASE_ANON_KEY');
-
-export const isSupabaseConfigured = !!(supabaseUrl && supabaseAnonKey && supabaseUrl !== 'https://placeholder.supabase.co');
+export const isSupabaseConfigured = !!(supabaseUrl && supabaseAnonKey)
 
 if (!isSupabaseConfigured) {
-  console.warn("Supabase credentials missing! Authentication will not work correctly.");
+  console.warn("Supabase credentials missing! Authentication will not work correctly.")
 }
 
-// Use a distinct dummy URL if missing so we can catch it, but don't use a real domain that times out
-const validUrl = isSupabaseConfigured ? supabaseUrl : 'https://missing-config.local';
-const validKey = isSupabaseConfigured ? supabaseAnonKey : 'missing-key';
+// Singleton pattern to prevent multiple client instances
+let supabaseInstance: SupabaseClient | null = null
 
-export const supabase = createClient(validUrl, validKey);
+export function getSupabase(): SupabaseClient | null {
+  if (!isSupabaseConfigured) {
+    return null
+  }
+
+  if (!supabaseInstance) {
+    supabaseInstance = createBrowserClient(supabaseUrl!, supabaseAnonKey!)
+  }
+
+  return supabaseInstance
+}
+
+// For backward compatibility - exports a client or null
+export const supabase = isSupabaseConfigured ? createBrowserClient(supabaseUrl!, supabaseAnonKey!) : null
